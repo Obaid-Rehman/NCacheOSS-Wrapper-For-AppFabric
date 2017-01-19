@@ -1,8 +1,7 @@
 # NCache Wrapper For AppFabric
 AppFabric NCache Wrapper Guide:
 
-NCache is a powerful distributed .NET caching solution. To use NCache as the caching solution to your existing AppFabric application simply 
-follow the minimalistic instructions in this guide.
+NCache is a powerful distributed .NET caching solution. To use NCache as the caching solution to your existing AppFabric application simply follow the minimalistic instructions in this guide.
 
 STEP 1:
 
@@ -30,9 +29,7 @@ Add the following <appSettings> tag in your app.config or web.config file in you
 			<add key="TTL" value="6:12:14"/> <!-- Expiration time in Hour, Minutes, Seconds format for TimeSpan -->
   	</appSettings>
 
-That is it! Now build your solution with .NET framework 4 and your applciation will be using NCache.
 
 NOTE: The regions are like caches in NCache so in order to use your existing regions you must register the regions in NCache as caches.
 For eg. If you have a region named "default" currently working in your application then you should register a cache by the name "default" 
-using NCache Manager or command line tools( if using Open Source version). Configure the cache and set the policies through the command line 
-tools as NCache cofiguration are compile-time unlike AppFabrics runtime configurations.
+using NCache Manager or command line tools( if using Open Source version). Configure the cache and set the policies through the command line tools as NCache cofiguration are compile-time unlike AppFabrics runtime configurations.
