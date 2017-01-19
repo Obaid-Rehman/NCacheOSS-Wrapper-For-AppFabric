@@ -109,6 +109,8 @@
     <Compile Include="DataCacheOperationDescriptor.cs" />
     <Compile Include="DataCacheOperations.cs" />
     <Compile Include="DataCacheTag.cs" />
+    <Compile Include="Util\ItemVersion.cs" />
+    <Compile Include="Util\MetaDataCapsule.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">

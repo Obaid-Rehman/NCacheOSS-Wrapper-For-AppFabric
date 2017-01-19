@@ -94,29 +94,17 @@ namespace Alachisoft.NCache.Data.Caching
 
         public void OnRegionClear(object region)
         {
-            if (Callback != null && (Operation & DataCacheOperations.ClearRegion) == DataCacheOperations.ClearRegion)
-            {
-                Callback(CacheId, (string)region, null, null, DataCacheOperations.ClearRegion, NotificationDescriptor);
-            }
         }
 
         public void OnRegionAdd(object region)
         {
-            if (Callback != null && (Operation & DataCacheOperations.CreateRegion) == DataCacheOperations.CreateRegion)
-            {
-                Callback(CacheId, (string)region, null, null, DataCacheOperations.CreateRegion, NotificationDescriptor);
-            }
         }
 
         public void OnRegionDeletion(object region)
         {
-            if (Callback != null && (Operation & DataCacheOperations.RemoveRegion) == DataCacheOperations.RemoveRegion)
-            {
-                Callback(CacheId, (string)region, null, null, DataCacheOperations.RemoveRegion, NotificationDescriptor);
-            }
         }
 
-        public void OnSpecificItemUpdate(string key)
+        public void OnSpecificItemUpdate(string key, EventArg args)
         {
             string[] keyRegion = _formatter.SplitKeyAndRegion(key);
             if (Type == CallbackType.ItemSpecificCallback)
@@ -140,7 +128,7 @@ namespace Alachisoft.NCache.Data.Caching
             }
         }
 
-        public void OnSpecificItemRemoved(string key,object value,Alachisoft.NCache.Web.Caching.CacheItemRemovedReason reason)
+        public void OnSpecificItemRemoved(string key, EventArg args)
         {
             string[] keyRegion = _formatter.SplitKeyAndRegion(key);
             if (Type == CallbackType.ItemSpecificCallback)

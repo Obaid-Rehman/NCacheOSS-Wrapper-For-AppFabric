@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Alachisoft.NCache.Web.Caching;
+using Alachisoft.NCache.Data.Caching.Util;
 
 namespace Alachisoft.NCache.Data.Caching
 {
     public class DataCacheItemVersion : IComparable<DataCacheItemVersion>
     {
-        internal CacheItemVersion _itemVersion;
+        internal ItemVersion _itemVersion = 0;
 
         public static bool operator !=(DataCacheItemVersion left, DataCacheItemVersion right) 
         {

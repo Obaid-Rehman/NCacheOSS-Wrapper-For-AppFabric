@@ -9,7 +9,9 @@ namespace Alachisoft.NCache.Data.Caching
     {
         #region[    Constructor ]
         public DataCacheLockHandle()
-        { }
+        {
+            _lockHandle = new LockHandle();
+        }
         #endregion
 
         public override string ToString()

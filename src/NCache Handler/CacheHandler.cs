@@ -8,6 +8,8 @@ using Alachisoft.NCache.Runtime.Caching;
 using System.Collections;
 using System.Configuration;
 using System.Runtime.Serialization;
+using Alachisoft.NCache.Data.Caching.Util;
+using System.Threading;
 
 namespace Alachisoft.NCache.Data.Caching.Handler
 {
@@ -23,23 +25,30 @@ namespace Alachisoft.NCache.Data.Caching.Handler
         private bool _addRegionCheck;
         private bool _removeRegionCheck;
         private bool _clearRegionCheck;
+
+        private TimeSpan _defaultLockTime;
+        private int _retries;
+        private TimeSpan _retryTimeOut;
         #endregion
 
         #region[    Constructor    ]
-        internal CacheHandler(Alachisoft.NCache.Web.Caching.Cache cache)
+        internal CacheHandler(Alachisoft.NCache.Web.Caching.Cache cache, TimeSpan defaultLockTime, int retries, TimeSpan retryTimeOut)
         {
            
             _NCache = cache;
             _addRegionCheck=false;
             _removeRegionCheck = false;
             _clearRegionCheck = false;
+            _defaultLockTime = defaultLockTime;
+            _retries = retries;
+            _retryTimeOut = retryTimeOut;
             _formatter = new DataFormatter();
            
         }
         #endregion
 
 
-        internal DataCacheItemVersion Add(string key, object value, IEnumerable<DataCacheTag> tags, TimeSpan timeOut, string region)
+        internal DataCacheItemVersion Add(string key, object value, TimeSpan timeOut, string region)
         {
             string expirationCheck = ConfigurationManager.AppSettings["Expirable"];
             
@@ -54,25 +63,26 @@ namespace Alachisoft.NCache.Data.Caching.Handler
                         TimeSpan tempTimeOut = TimeSpan.Parse(TTL);
                         if (!String.IsNullOrWhiteSpace(TTL) && tempTimeOut != TimeSpan.Zero)
                         {
-                            _item = _formatter.CreateCacheItem(value, tags, region, tempTimeOut);
+                            _item = _formatter.CreateCacheItem(value, region, tempTimeOut);
                         }
                         else if (String.IsNullOrWhiteSpace(TTL))
                         {
-                            _item = _formatter.CreateCacheItem(value, tags, region, TimeSpan.Zero);
+                            _item = _formatter.CreateCacheItem(value, region, TimeSpan.Zero);
                         }
                     }
                     else
                     {
-                        _item = _formatter.CreateCacheItem(value, tags, region,timeOut);
+                        _item = _formatter.CreateCacheItem(value, region,timeOut);
                     }
                 }
                 else if (expirationCheck.Equals("False"))
                 {
-                    _item = _formatter.CreateCacheItem(value, tags, region);
+                    _item = _formatter.CreateCacheItem(value, region);
                 }
                 string _key = _formatter.MarshalKey(key,region);
-                CacheItemVersion _version = _NCache.Add(_key, _item);
-                return _formatter.ConvertToAPVersion(_version);
+
+                _NCache.Add(_key, _item);
+                return _formatter.ConvertToAPVersion(1); // Always the first Item
             }
             catch (Exception exp)
             {
@@ -94,50 +104,22 @@ namespace Alachisoft.NCache.Data.Caching.Handler
 
         internal void CreateRegion(string region)
         {
-            if (_addRegionCheck == true)
-            {
-                _NCache.RaiseCustomEvent(region, CallbackType.AddRegion);
-            }
-        }
-       
-        internal void RegisterRegionCallBack(CallbackType opcode)
-        {
-            CallbackHandler _callbackHandle = new CallbackHandler();
-            if (opcode == CallbackType.AddRegion)
-            {
-                _NCache.CustomEvent += new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _addRegionCheck = true;
-            }
-            else if (opcode == CallbackType.ClearRegion)
-            {
-                _NCache.CustomEvent += new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _clearRegionCheck = true;
-            }
-            else if (opcode == CallbackType.RemoveRegion)
-            {
-                _NCache.CustomEvent += new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _removeRegionCheck = true;
-            }
+            //if (_addRegionCheck == true)
+            //{
+            //    _NCache.RaiseCustomEvent(region, CallbackType.AddRegion);
+            //}
         }
 
+        [Obsolete("Region callbacks are only supported in NCache Enterprise", true)]
+        internal void RegisterRegionCallBack(CallbackType opcode)
+        {
+            throw new NotSupportedException("Region Callbacks are only supported in NCache Enterprise");
+        }
+
+        [Obsolete("Region callbacks are only supported in NCache Enterprise", true)]
         internal void UnRegisterRegionCallBack(CallbackType opcode)
         {
-            CallbackHandler _callbackHandle = new CallbackHandler();
-            if (opcode == CallbackType.AddRegion)
-            {
-                _NCache.CustomEvent -= new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _addRegionCheck = false;
-            }
-            else if (opcode == CallbackType.ClearRegion)
-            {
-                _NCache.CustomEvent -= new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _clearRegionCheck = false;
-            }
-            else if (opcode == CallbackType.RemoveRegion)
-            {
-                _NCache.CustomEvent -= new CustomEventCallback(_callbackHandle.RegisterRegionCallback);
-                _removeRegionCheck = false;
-            }
+            throw new NotSupportedException("Region Callbacks are only supported in NCache Enterprise");
         }
 
         internal object Get(string key, out DataCacheItemVersion version, string region)
@@ -155,18 +137,23 @@ namespace Alachisoft.NCache.Data.Caching.Handler
             }
             try
             {
-                if (version != null)
+
+                MetaDataCapsule metadata = _NCache.Get(_key) as MetaDataCapsule;
+                if (metadata == null)
+                    return null;
+
+                obj = metadata.Value;
+
+
+                if (version._itemVersion != null && version._itemVersion != metadata.CacheItemVersion)
                 {
-                    CacheItemVersion _cItemVersion = _formatter.ConvertToNCacheVersion(version);
-                    obj = _NCache.Get(_key, ref _cItemVersion);
-                    if(_cItemVersion != null)
-                        if (_cItemVersion.Version != null)
-                            version._itemVersion = _cItemVersion;
+                    return null;
                 }
                 else
                 {
-                    obj = _NCache.Get(_key);
+                    version._itemVersion = metadata.CacheItemVersion;
                 }
+
                 if (obj != null)
                 {
                     return obj;
@@ -183,78 +170,39 @@ namespace Alachisoft.NCache.Data.Caching.Handler
         internal IEnumerable<KeyValuePair<string, object>> GetBulk(IEnumerable<string> keys, string region)
         {
             string[] keyList = _formatter.MarshalKey(keys, region);
-            IDictionary _temp = _NCache.GetBulk(keyList, DSReadOption.None);
+            
+            IDictionary _temp = _NCache.GetBulk(keyList);
             IDictionaryEnumerator _tempEnumerator = (IDictionaryEnumerator)_temp.GetEnumerator();
             while (_tempEnumerator.MoveNext())
             {
                 DictionaryEntry item = _tempEnumerator.Entry;
-                yield return new KeyValuePair<string, object>(item.Key.ToString(), item.Value);
+                yield return new KeyValuePair<string, object>(_formatter.UnMarshalKey(item.Key.ToString()), (item.Value as MetaDataCapsule).Value);
             }
         }
 
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         internal IEnumerable<KeyValuePair<string, object>> GetObjectsByTag(string region, DataCacheTag tag)
         {
-            Hashtable getByTagResult = new Hashtable();
-            
-            Tag nTag  = _formatter.MarshalTag(tag,region);
-           
-            getByTagResult = _NCache.GetByTag(nTag);
-           
-            if (getByTagResult != null)
-            {
-                foreach (DictionaryEntry entry in getByTagResult)
-                {
-                    object _item =(object) entry.Value;
-                    yield return new KeyValuePair<string, object>(_formatter.UnMarshalKey((string)entry.Key), _item);
-                }
-            }
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
         
-        internal IEnumerable<KeyValuePair<string, object>> GetObjectsByAnyTag(IEnumerable<DataCacheTag> tags, string region)
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
+        internal IEnumerable<KeyValuePair<string, object>> 
+            GetObjectsByAnyTag(IEnumerable<DataCacheTag> tags, string region)
         {
-            Hashtable _resultSet = new Hashtable();
-            Tag[] nTags = _formatter.MarshalTags(tags, region);
-            
-            _resultSet = _NCache.GetByAnyTag(nTags);
-
-            if (_resultSet != null)
-            {
-                foreach (DictionaryEntry entry in _resultSet)
-                {
-                    object _item = (object)entry.Value;
-                    yield return new KeyValuePair<string, object>(_formatter.UnMarshalKey((string)entry.Key), _item);
-                }
-            }
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         internal IEnumerable<KeyValuePair<string, object>> GetObjectsByAllTags(IEnumerable<DataCacheTag> tags, string region)
         {
-            Hashtable _resultSet = new Hashtable();
-            Tag[] nTags = _formatter.MarshalTags(tags, region);
-
-            _resultSet = _NCache.GetByAllTags(nTags);
-
-            if (_resultSet != null)
-            {
-                foreach (DictionaryEntry entry in _resultSet)
-                {
-                    object _item = (object)entry.Value;
-                    yield return new KeyValuePair<string, object>(_formatter.UnMarshalKey((string)entry.Key), _item);
-                }
-            }
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
-        
+
+        [Obsolete("Regions are kept as Groups in NCache and Groups are only supported in NCache Enterprise", true)]
         internal IEnumerable<KeyValuePair<string, object>> GetObjectsInRegion(string region) 
         {
-            IDictionary getByTagResult = _NCache.GetGroupData(region,null);
-            if (getByTagResult != null)
-            {
-                foreach (DictionaryEntry entry in getByTagResult)
-                {
-                    object _item = (object)entry.Value;
-                    yield return new KeyValuePair<string, object>(_formatter.UnMarshalKey((string)entry.Key), _item);
-                }
-            }
+            throw new NotSupportedException("Regions are kept as Groups in NCache and Groups are only supported in NCache Enterprise");
         }
 
         internal object GetLock(string key, TimeSpan timeOut, out DataCacheLockHandle appLockHandle, string region, bool forceLock)
@@ -273,6 +221,7 @@ namespace Alachisoft.NCache.Data.Caching.Handler
                     key = _formatter.MarshalKey(key, region);
                 }
                 object cacheGetAndLockResult = _NCache.Get(key, timeOut, ref lockHandle, true);
+
                 if (cacheGetAndLockResult == null)
                 {
                     obj = _NCache.Get(key, timeOut, ref lockHandle, true);
@@ -288,7 +237,59 @@ namespace Alachisoft.NCache.Data.Caching.Handler
                 throw ex;
             }
         }
-        
+
+
+        /// <summary>
+        /// Tries to acqurie lock and return LockHandle and MetaDataCapsule object. If LockHandle is provided uses that instead.
+        /// <para>Default Lock Timeout (default 5 seconds), Retry Count (default 3) 
+        /// and retry interval (default 100 ms) is set when Cache Handler is instantiated.</para>
+        /// </summary>
+        /// <param name="key">Formatted Key i.e compile from formatter</param>
+        /// <param name="lockHandle">Either provide a lock or keep it null to acquire a new lock</param>
+        /// <param name="metadata">The returned object for internal use</param>
+        /// <returns>true if lock was acquired</returns>
+        internal bool GetLock(string key, ref LockHandle lockHandle, out MetaDataCapsule metadata)
+        {
+            //Item is locked
+            int count = _retries;
+            while (count != 0)
+            {
+                //If lock was provided attempt to acquire the lock from the given handle
+                if (lockHandle == null)
+                {
+                    lockHandle = new LockHandle(); 
+                }
+
+                //1. If item does not exist: obj is null & lockHandle will have lockId empty.
+                //2. if Item exists but but already locked; obj is null and lockHandle will be updated with the acquired lock
+                //3. If Item exists but free for locking; obj is returned with object and lock will be updated with the correct lockId.
+                object obj = _NCache.Get(key, _defaultLockTime, ref lockHandle, true);
+
+                //obj is null if the lock was not acquried
+                if (obj == null)
+                {
+                    //Item does not exist
+                    if (String.IsNullOrWhiteSpace(lockHandle.LockId))
+                    {
+                        metadata = null;
+                        return false;
+                    }
+                    count--;
+                    Thread.Sleep(_retryTimeOut);
+                }
+                else
+                {
+                    metadata = obj as MetaDataCapsule;
+                    return true;
+                }
+            }
+
+            lockHandle = null;
+            metadata = null;
+            return false;
+
+        }
+                
         internal DataCacheItem GetCacheItem(string key, string region,string CacheName)
         {
             try
@@ -304,8 +305,10 @@ namespace Alachisoft.NCache.Data.Caching.Handler
                     _key = _formatter.MarshalKey(key, region);
                 }
                 _dataCacheItem = _formatter.ConvertToDataCacheItem(_NCache.GetCacheItem(_key));
-                _dataCacheItem.Key = key;
+                string[] items = _formatter.SplitKeyAndRegion(_key);
+                _dataCacheItem.Key = items[0];
                 _dataCacheItem.CacheName = CacheName;
+                _dataCacheItem.RegionName = items[1];
 
                 return _dataCacheItem;
             }
@@ -319,19 +322,26 @@ namespace Alachisoft.NCache.Data.Caching.Handler
         {
             
             string _key = _formatter.MarshalKey(key,region);
-            CacheItemVersion nVersion = _formatter.ConvertToNCacheVersion(version);
-            object obj = _NCache.GetIfNewer(_key, null, null, ref nVersion);
-            return obj;
+
+            MetaDataCapsule metadata = _NCache.Get(_key) as MetaDataCapsule;
+            if (version._itemVersion < metadata.CacheItemVersion)
+            {
+                return metadata.Value;
+            }
+            else
+            {
+                return null;
+            }
        
         }
        
         internal string GetSystemRegionName(string key)
         {
             string _key = _formatter.MarshalKey(key);
-            CacheItem _item= _NCache.GetCacheItem(_key);
-            if (_item != null)
+            MetaDataCapsule metadata = _NCache.Get(_key) as MetaDataCapsule;
+            if (metadata != null)
             {
-                return _item.Group;
+                return metadata.Group;
             }
             else
             {
@@ -342,11 +352,9 @@ namespace Alachisoft.NCache.Data.Caching.Handler
         internal DataCacheItemVersion Put(string key, object value, DataCacheItemVersion oldVersion, TimeSpan timeOut,
             IEnumerable<DataCacheTag> tags, string region)
         {
-            CacheItem _item=_formatter.CreateCacheItem(value, tags, region, timeOut);
-            if (oldVersion != null)
-            {
-                _item.Version = oldVersion._itemVersion;
-            }
+            CacheItem _item=_formatter.CreateCacheItem(value, region, timeOut);
+            MetaDataCapsule metadata = _item.Value as MetaDataCapsule;
+
             string _key;
 
             if (string.IsNullOrWhiteSpace(region))
@@ -357,18 +365,54 @@ namespace Alachisoft.NCache.Data.Caching.Handler
             {
                 _key = _formatter.MarshalKey(key, region);
             }
-#if PROFESSIONAL                    
-                  
-#else
-            CacheItemVersion _version = _NCache.Insert(_key,_item);
-            return _formatter.ConvertToAPVersion(_version);
-#endif
+
+            LockHandle lockhandle = null;
+            MetaDataCapsule cachedMetadata;
+
+            bool lockAcquired = GetLock(_key, ref lockhandle, out cachedMetadata);
+
+            if(!lockAcquired)
+            {
+                //Item does not exist
+                if (lockhandle != null && String.IsNullOrWhiteSpace(lockhandle.LockId))
+                    lockhandle = new LockHandle();
+                else
+                    throw new DataCacheException("Unable to acqurie lock to update Item Version");
+            }
+
+            if (oldVersion != null)
+            {
+                //Return in case of wrong version provided
+                if (cachedMetadata == null)
+                {
+                    //Item did not exist
+                    return null;
+                }
+                else if (cachedMetadata.CacheItemVersion == oldVersion._itemVersion)
+                {
+                    _NCache.Unlock(key);
+                    return null;
+                }
+            }
+
+            if (lockAcquired)
+            {
+                metadata.CacheItemVersion = ++cachedMetadata.CacheItemVersion; 
+            }
+            else
+            {
+                metadata = MetaDataCapsule.Encapsulate(value, region);
+            }
+
+            _NCache.Insert(_key, _item, lockhandle, true);
+
+            return _formatter.ConvertToAPVersion(metadata.CacheItemVersion);
         }
 
         internal DataCacheItemVersion PutAndUnlock(string key, object value, DataCacheLockHandle lockHandle, TimeSpan timeOut,
             IEnumerable<DataCacheTag> tags, string region)
         {
-            CacheItem _item = _formatter.CreateCacheItem(value, tags, region, timeOut);
+            CacheItem _item = _formatter.CreateCacheItem(value, region, timeOut);
             string _key;
             if (string.IsNullOrWhiteSpace(region))
             {
@@ -378,8 +422,26 @@ namespace Alachisoft.NCache.Data.Caching.Handler
                 _key = _formatter.MarshalKey(key, region);
 
             LockHandle nLockHandle = _formatter.ConvertToNCacheLockHandle(lockHandle);
-            CacheItemVersion _ver = _NCache.Insert(_key, _item, nLockHandle, true);
-            return _formatter.ConvertToAPVersion(_ver);
+            MetaDataCapsule metadata;
+
+            bool lockAcquired = GetLock(_key, ref nLockHandle, out metadata);
+
+            if (!lockAcquired)
+            {
+                _NCache.Unlock(key);
+                throw new DataCacheException("Unable to acqurie lock to update Item Version"); 
+            }
+
+            long newversion = metadata.CacheItemVersion + 1;
+
+            if (lockAcquired)
+            {
+                (_item.Value as MetaDataCapsule).CacheItemVersion = newversion;
+            }
+
+            _NCache.Insert(_key, _item, nLockHandle, true);
+
+            return _formatter.ConvertToAPVersion(newversion);
         }
 
         internal bool Remove(string key, DataCacheLockHandle lockHandle, string region, DataCacheItemVersion version,RemoveOperation opCode)
@@ -407,15 +469,27 @@ namespace Alachisoft.NCache.Data.Caching.Handler
             }
             else if(opCode== RemoveOperation.VersionBased) 
             {
-                CacheItemVersion itemVersion = _formatter.ConvertToNCacheVersion(version);
-                if (_NCache.Remove(key,itemVersion) != null)
+                ItemVersion itemVersion = _formatter.ConvertToNCacheVersion(version);
+                LockHandle lockhandle = null;
+                MetaDataCapsule meta;
+                bool lockAcquired = GetLock(key, ref lockhandle, out meta);
+                if (lockAcquired && meta.CacheItemVersion == itemVersion)
                 {
-                    return true;
+                    if (_NCache.Remove(key, lockhandle) != null)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        _NCache.Unlock(key, lockhandle);
+                        return false;
+                    }
                 }
                 else
                 {
                     return false;
                 }
+                
             }
             else if (opCode == RemoveOperation.KeyBased)
             {
@@ -434,30 +508,10 @@ namespace Alachisoft.NCache.Data.Caching.Handler
             }
         }
 
+        [Obsolete("Regions are stored as Groups in NCache, a feature avaiable only in NCache Enterprise", true)]
         internal bool RemoveRegionData(string region,CallbackType opCode)
         {
-            try
-            {
-                _NCache.RemoveGroupData(region, null);
-                if (opCode == CallbackType.ClearRegion)
-                {
-                    if (_clearRegionCheck == true)
-                    {
-                        _NCache.RaiseCustomEvent(region, CallbackType.ClearRegion);
-                    }
-                }
-                else if (opCode == CallbackType.RemoveRegion)
-                {
-                    if(_removeRegionCheck == true)
-                    _NCache.RaiseCustomEvent(region, CallbackType.RemoveRegion);
-                }
-
-                return true;
-            }
-            catch (Exception exp)
-            {
-                return false;
-            }
+            throw new NotSupportedException("Regions are stored as Groups in NCache, a feature avaiable only in NCache Enterprise");
         }
 
         internal bool ResetObjectTimeout(string key, TimeSpan newTimeOut, string region)
@@ -481,17 +535,26 @@ namespace Alachisoft.NCache.Data.Caching.Handler
             {
                 _item.AbsoluteExpiration = System.DateTime.Now.AddMinutes(10.0);
             }
-            if (_NCache.Insert(_key, _item) != null)
+
+            try
             {
-                return true;
+                _NCache.Insert(_key, _item);
             }
-            else
+            catch (Alachisoft.NCache.Runtime.Exceptions.OperationFailedException opfailed)
+            {
                 return false;
+            }
+            return true;
+            
         }
 
         internal bool Unlock(string key, DataCacheLockHandle appLockHandle, TimeSpan timeOut, string region)
         {
-            appLockHandle = new DataCacheLockHandle();
+            if(appLockHandle == null || appLockHandle._lockHandle == null)
+            {
+                return false;
+            }
+
             LockHandle lockHandle = _formatter.ConvertToNCacheLockHandle(appLockHandle);
 
             string _key;
@@ -507,15 +570,19 @@ namespace Alachisoft.NCache.Data.Caching.Handler
 
             if (timeOut != TimeSpan.Zero)
             {
-                CacheItem _item = (CacheItem)_NCache.Get(_key);
+                CacheItem _item = (CacheItem)_NCache.GetCacheItem(_key);
                 _item.AbsoluteExpiration = DateTime.Now.Add(timeOut);
 
-                if (_NCache.Insert(_key, _item, lockHandle, true) != null)
+                try
                 {
-                    _NCache.Unlock(_key, lockHandle);
+                    _NCache.Insert(_key, _item, lockHandle, true);
+                    return true;
+
                 }
-                else
+                catch (Exception)
+                {
                     return false;
+                }
             }
             else
             {

@@ -29,11 +29,11 @@ namespace Alachisoft.NCache.Data.Caching
     public class DataCache
     {
         #region [           Constructor           ]
-        internal DataCache(Alachisoft.NCache.Web.Caching.Cache nCache, string cacheName)
+        internal DataCache(Alachisoft.NCache.Web.Caching.Cache nCache, string cacheName, TimeSpan lockTimeout, int retries, TimeSpan lockRetryDelay)
         {
             this._NCache = nCache;
             this._CacheName = cacheName;
-            _cache = new CacheHandler(_NCache);
+            _cache = new CacheHandler(_NCache, lockTimeout, retries, lockRetryDelay);
             _formatter = new DataFormatter();
             _callabackMap = new Dictionary<DataCacheNotificationDescriptor, CallbackHandler>();
         }
@@ -50,7 +50,7 @@ namespace Alachisoft.NCache.Data.Caching
         /// </returns>
         public DataCacheItemVersion Add(string key, object value)
         {
-            return Add(key, value, null, TimeSpan.Zero, null);
+            return _cache.Add(key, value, TimeSpan.Zero, null);
         }
 
         /// <summary>
@@ -65,7 +65,7 @@ namespace Alachisoft.NCache.Data.Caching
         /// of the object saved to the cache under the key value.</returns>
         public DataCacheItemVersion Add( string key, object value,string region)
         {
-            return Add(key, value, null, TimeSpan.Zero, region);
+            return _cache.Add(key, value, TimeSpan.Zero, region);
         }
 
         /// <summary>
@@ -80,7 +80,8 @@ namespace Alachisoft.NCache.Data.Caching
         /// of the object saved to the cache under the key value.</returns>
         public DataCacheItemVersion Add( string key, object value, TimeSpan timeOut,string region)
         {
-            return Add(key, value, null, timeOut, region);
+            return _cache.Add(key, value, timeOut, region);
+
         }
 
         /// <summary>
@@ -92,6 +93,7 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="value"></param>
         /// <param name="tags"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public DataCacheItemVersion Add(string key, object value, IEnumerable<DataCacheTag> tags, string region)
         {
             return Add(key, value, tags, TimeSpan.Zero, region);
@@ -107,17 +109,10 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="tags"></param>
         /// <param name="timeOut"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public DataCacheItemVersion Add(string key, object value, IEnumerable<DataCacheTag> tags, TimeSpan timeOut, string region)
         {
-            if (string.IsNullOrEmpty(key))
-            {
-                throw new DataCacheException("Invalid key");
-            }
-            if (value == null)
-            {
-                throw new DataCacheException("Operation Failed");
-            }
-           return _cache.Add(key, value, tags, timeOut, region);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -128,9 +123,10 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="tags"></param>
         /// <param name="timeOut"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public DataCacheItemVersion Add(string key, object value, TimeSpan timeOut, IEnumerable<DataCacheTag> tags)
         {
-            return Add(key, value, tags, timeOut, null);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -140,9 +136,10 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="value"></param>
         /// <param name="tags"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public DataCacheItemVersion Add(string key, object value, IEnumerable<DataCacheTag> tags)
         {
-            return Add(key, value, tags, TimeSpan.Zero, null);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -154,7 +151,7 @@ namespace Alachisoft.NCache.Data.Caching
         /// <returns></returns>
         public DataCacheItemVersion Add(string key, object value, TimeSpan timeOut)
         {
-            return Add(key, value, null, timeOut, null);
+            return _cache.Add(key, value, timeOut, null);
         }
         #endregion
 
@@ -163,17 +160,14 @@ namespace Alachisoft.NCache.Data.Caching
         /// Clears the contents of a region
         /// </summary>
         /// <param name="region"></param>
+        [Obsolete("Regions are stored as Groups in NCache, Groups are only avaialable in NCache Enterprise", true)]
         public void ClearRegion(string region)
         {
             if (String.IsNullOrEmpty(region))
             {
                 throw new DataCacheException("Region Does not exist");
             }
-            else
-            {
-                _cache.RemoveRegionData(region,CallbackType.ClearRegion);
-            }
-        } 
+        }
         #endregion
 
         #region [       Cache.CreateRegion        ]
@@ -183,6 +177,7 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="region"></param>
         /// <param name="evictable"></param>
         /// <returns></returns>
+        [Obsolete("Regions are supported in NCache Enterprise", true)]
         public bool CreateRegion(string region)
         {
             _cache.CreateRegion(region);
@@ -243,7 +238,7 @@ namespace Alachisoft.NCache.Data.Caching
                 throw new DataCacheException("Inavlid key");
             }
             return _cache.Get(key, out version, region);
-        } 
+        }
         #endregion
 
         #region [          Cache.GetObject Operations         ]
@@ -254,13 +249,15 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="region"></param>
         /// <param name="tag"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise Edition", true)]
         public IEnumerable<KeyValuePair<string, object>> GetObjectsByTag(DataCacheTag tag, string region)
         {
             if (string.IsNullOrEmpty(region))
             {
                 throw new DataCacheException("Inavlid Region");
             }
-            return _cache.GetObjectsByTag(region, tag);
+            //return _cache.GetObjectsByTag(region, tag);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise Edition");
          }
 
         /// <summary>
@@ -270,13 +267,15 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="tags"></param>
         /// <param name="region"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise",true)]
         public IEnumerable<KeyValuePair<string, object>> GetObjectsByAnyTag(IEnumerable<DataCacheTag> tags, string region)
         {
-            if (string.IsNullOrEmpty(region))
-            {
-                throw new DataCacheException("Inavlid Region");
-            }
-            return _cache.GetObjectsByAnyTag(tags,region);
+            //if (string.IsNullOrEmpty(region))
+            //{
+            //    throw new DataCacheException("Inavlid Region");
+            //}
+            //return _cache.GetObjectsByAnyTag(tags,region);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -286,27 +285,31 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="tags"></param>
         /// <param name="region"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public IEnumerable<KeyValuePair<string, object>> GetObjectsByAllTags(IEnumerable<DataCacheTag> tags, string region)
         {
-            if (string.IsNullOrEmpty(region))
-            {
-                throw new DataCacheException("Inavlid Region");
-            }
-            return _cache.GetObjectsByAllTags(tags,region);
+            //if (string.IsNullOrEmpty(region))
+            //{
+            //    throw new DataCacheException("Inavlid Region");
+            //}
+            //return _cache.GetObjectsByAllTags(tags,region);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
-        
+
         /// <summary>
         /// returns a list of all the objects in a region
         /// </summary>
         /// <param name="region"></param>
         /// <returns></returns>
+        [Obsolete("Tags are only supported in NCache Enterprise", true)]
         public IEnumerable<KeyValuePair<string, object>> GetObjectsInRegion(string region)
         {
-            if (string.IsNullOrEmpty(region))
-            {
-                throw new DataCacheException("Inavlid Region");
-            }
-            return _cache.GetObjectsInRegion(region);
+            //if (string.IsNullOrEmpty(region))
+            //{
+            //    throw new DataCacheException("Inavlid Region");
+            //}
+            //return _cache.GetObjectsInRegion(region);
+            throw new NotSupportedException("Tags are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -1243,17 +1246,8 @@ namespace Alachisoft.NCache.Data.Caching
             {
                 throw new DataCacheException("Region Does not exist");
             }
-            else
-            {
-                try
-                {
-                    return _cache.RemoveRegionData(region,CallbackType.RemoveRegion);
-                }
-                catch (Exception)
-                {
-                    return false;
-                }
-            }
+            return true;
+            
         }
         #endregion
 
@@ -1335,47 +1329,10 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="filter"></param>
         /// <param name="clientCallback"></param>
         /// <returns></returns>
+        [Obsolete("Events are only supported in NCache Enterprise",true)]
         public DataCacheNotificationDescriptor AddCacheLevelCallback(DataCacheOperations filter, DataCacheNotificationCallback clientCallback)
         {
-            DataCacheNotificationDescriptor descriptor = CreateNotificationDescriptor();
-            CallbackHandler callback = new CallbackHandler();
-            
-            callback.Region = null;
-            callback.CacheId = _CacheName;
-            callback.Callback = clientCallback;
-            callback.Operation = filter;
-            callback.NotificationDescriptor = descriptor;
-            callback.Type = CallbackType.CacheLevelCallback;
-            callback.Key = null;
-            
-            if((filter & DataCacheOperations.AddItem) == DataCacheOperations.AddItem)
-            {
-                callback.NCacheEventDescriptor =  _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemAdded), Runtime.Events.EventType.ItemAdded, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if((filter & DataCacheOperations.ReplaceItem) == DataCacheOperations.ReplaceItem)
-            {
-                callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemUpdated), Runtime.Events.EventType.ItemUpdated, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
-            {
-                callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemRemoved), Runtime.Events.EventType.ItemRemoved, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if ((filter & DataCacheOperations.ClearRegion) == DataCacheOperations.ClearRegion)
-            {
-                _cache.RegisterRegionCallBack(CallbackType.ClearRegion);
-            }
-            if ((filter & DataCacheOperations.CreateRegion) == DataCacheOperations.CreateRegion)
-            {
-                _cache.RegisterRegionCallBack(CallbackType.AddRegion);
-            }
-            if ((filter & DataCacheOperations.RemoveRegion) == DataCacheOperations.RemoveRegion)
-            {
-                _cache.RegisterRegionCallBack(CallbackType.RemoveRegion);
-            }
-          
-            _callabackMap.Add(descriptor,callback);
-
-            return descriptor;
+            throw new NotSupportedException("Events are only supported in NCache Enterprise");
         }
 
         /// <summary>
@@ -1384,42 +1341,25 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="notificationDiscriptor"></param>
         public void RemoveCallback(DataCacheNotificationDescriptor notificationDiscriptor)
         {
-           if(_callabackMap.ContainsKey(notificationDiscriptor))
-           {
-                CallbackHandler _callback= _callabackMap[notificationDiscriptor];
-               
-                if (_callback.Type == CallbackType.CacheLevelCallback)
-                {
-                    if ((_callback.Operation) == DataCacheOperations.AddItem || (_callback.Operation) == DataCacheOperations.RemoveItem || (_callback.Operation) == DataCacheOperations.ReplaceItem)
-                    {
-                        _NCache.UnRegisterCacheNotification(_callback.NCacheEventDescriptor);
-                    }
+            
+            if (_callabackMap.ContainsKey(notificationDiscriptor))
+            {
+                CallbackHandler _callback = _callabackMap[notificationDiscriptor];
 
-                    if ((_callback.Operation) == DataCacheOperations.ClearRegion)
-                    {
-                        _cache.UnRegisterRegionCallBack(CallbackType.ClearRegion);
-                    }
-                    if ((_callback.Operation) == DataCacheOperations.CreateRegion)
-                    {
-                        _cache.UnRegisterRegionCallBack(CallbackType.AddRegion);
-                    }
-                    if ((_callback.Operation) == DataCacheOperations.RemoveRegion)
-                    {
-                        _cache.UnRegisterRegionCallBack(CallbackType.RemoveRegion);
-                    }
-                }
-                else if (_callback.Type == CallbackType.ItemSpecificCallback)
+                if (_callback.Type == CallbackType.ItemSpecificCallback)
                 {
                     if (_callback.Region == "null")
                     {
-                        _NCache.UnRegisterKeyNotificationCallback(_formatter.MarshalKey(_callback.Key), _callback.OnSpecificItemUpdate, _callback.OnSpecificItemRemoved);
+                        _NCache.UnRegisterCacheNotification(_formatter.MarshalKey(_callback.Key), _callback.OnSpecificItemUpdate, Runtime.Events.EventType.ItemUpdated);
+                        _NCache.UnRegisterCacheNotification(_formatter.MarshalKey(_callback.Key), _callback.OnSpecificItemRemoved, Runtime.Events.EventType.ItemRemoved);
                     }
                 }
                 else if (_callback.Type == CallbackType.RegionSpecificItemCallback)
                 {
-                    _NCache.UnRegisterKeyNotificationCallback(_formatter.MarshalKey(_callback.Key,_callback.Region), _callback.OnSpecificItemUpdate, _callback.OnSpecificItemRemoved);
+                    _NCache.UnRegisterCacheNotification(_formatter.MarshalKey(_callback.Key, _callback.Region), _callback.OnSpecificItemUpdate, Runtime.Events.EventType.ItemUpdated);
+                    _NCache.UnRegisterCacheNotification(_formatter.MarshalKey(_callback.Key, _callback.Region), _callback.OnSpecificItemRemoved, Runtime.Events.EventType.ItemRemoved);
                 }
-           }
+            }
         }
 
         /// <summary>
@@ -1453,23 +1393,17 @@ namespace Alachisoft.NCache.Data.Caching
             callback.NotificationDescriptor = descriptor;
             callback.Type = CallbackType.ItemSpecificCallback;
             callback.Key = key;
-
+            
             if ((filter & DataCacheOperations.ReplaceItem) == DataCacheOperations.ReplaceItem)
             {
-                if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
-                {
-                    _NCache.RegisterKeyNotificationCallback(_formatter.MarshalKey(key), callback.OnSpecificItemUpdate, callback.OnSpecificItemRemoved);
-                }
-                else
-                {
-                    _NCache.RegisterKeyNotificationCallback(_formatter.MarshalKey(key), callback.OnSpecificItemUpdate, null);
-                }
+                _NCache.RegisterCacheNotification(_formatter.MarshalKey(key), callback.OnSpecificItemUpdate, Runtime.Events.EventType.ItemUpdated);
             }
-            else if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
+
+            if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
             {
-                _NCache.RegisterKeyNotificationCallback(_formatter.MarshalKey(key), null, callback.OnSpecificItemRemoved);
+                _NCache.RegisterCacheNotification(_formatter.MarshalKey(key), callback.OnSpecificItemRemoved, Runtime.Events.EventType.ItemRemoved);
             }
-          
+
             _callabackMap.Add(descriptor, callback);
 
             return descriptor;
@@ -1496,22 +1430,18 @@ namespace Alachisoft.NCache.Data.Caching
             callback.NotificationDescriptor = descriptor;
             callback.Type = CallbackType.RegionSpecificItemCallback;
             callback.Key = key;
-                    
+
+
             if ((filter & DataCacheOperations.ReplaceItem) == DataCacheOperations.ReplaceItem)
             {
-                if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
-                {
-                    _NCache.RegisterKeyNotificationCallback(_formatter.MarshalKey(key,region), callback.OnSpecificItemUpdate, callback.OnSpecificItemRemoved);
-                }
-                else
-                {
-                    _NCache.RegisterKeyNotificationCallback(key, callback.OnSpecificItemUpdate, null);
-                }
+                _NCache.RegisterCacheNotification(_formatter.MarshalKey(key, region), callback.OnSpecificItemUpdate, Runtime.Events.EventType.ItemUpdated);
             }
-            else if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
+
+            if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
             {
-                _NCache.RegisterKeyNotificationCallback(_formatter.MarshalKey(key, region), null, callback.OnSpecificItemRemoved);
+                _NCache.RegisterCacheNotification(_formatter.MarshalKey(key, region), callback.OnSpecificItemRemoved, Runtime.Events.EventType.ItemRemoved);
             }
+
 
             _callabackMap.Add(descriptor, callback);
             return descriptor;
@@ -1524,47 +1454,49 @@ namespace Alachisoft.NCache.Data.Caching
         /// <param name="filter"></param>
         /// <param name="clientCallback"></param>
         /// <returns></returns>
+        [Obsolete("Region Level Callbacks are only supported in NCache Enterprise", true)]
         public DataCacheNotificationDescriptor AddRegionLevelCallback(string region, DataCacheOperations filter, DataCacheNotificationCallback clientCallback)
         {
-            DataCacheNotificationDescriptor descriptor = CreateNotificationDescriptor();
+            //DataCacheNotificationDescriptor descriptor = CreateNotificationDescriptor();
 
-            CallbackHandler callback = new CallbackHandler();
-            callback.Region = region;
-            callback.CacheId = _CacheName;
-            callback.Callback = clientCallback;
-            callback.Operation = filter;
-            callback.NotificationDescriptor = descriptor;
-            callback.Type = CallbackType.RegionSpecificCallback;
-            callback.Key = null;
+            //CallbackHandler callback = new CallbackHandler();
+            //callback.Region = region;
+            //callback.CacheId = _CacheName;
+            //callback.Callback = clientCallback;
+            //callback.Operation = filter;
+            //callback.NotificationDescriptor = descriptor;
+            //callback.Type = CallbackType.RegionSpecificCallback;
+            //callback.Key = null;
 
-            if ((filter & DataCacheOperations.AddItem) == DataCacheOperations.AddItem)
-            {
-                callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemAdded), Runtime.Events.EventType.ItemAdded, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if ((filter & DataCacheOperations.ReplaceItem) == DataCacheOperations.ReplaceItem)
-            {
-                callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemUpdated), Runtime.Events.EventType.ItemUpdated, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
-            {
-                callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemRemoved), Runtime.Events.EventType.ItemRemoved, Runtime.Events.EventDataFilter.DataWithMetadata);
-            }
-            if ((filter & DataCacheOperations.ClearRegion) == DataCacheOperations.ClearRegion)
-            {
-                //
-                //NCache.CacheCleared += new CacheClearedCallback(callback.onRegionClear);
-            }
-            if ((filter & DataCacheOperations.CreateRegion) == DataCacheOperations.CreateRegion)
-            {
-                //: No support provided yet due to lack of compatibility by NCache
-            }
-            if ((filter & DataCacheOperations.RemoveRegion) == DataCacheOperations.RemoveRegion)
-            {
-                // No support provided yet due to lack of compatibility by NCache
-            }
+            //if ((filter & DataCacheOperations.AddItem) == DataCacheOperations.AddItem)
+            //{
+            //    callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemAdded), Runtime.Events.EventType.ItemAdded, Runtime.Events.EventDataFilter.DataWithMetadata);
+            //}
+            //if ((filter & DataCacheOperations.ReplaceItem) == DataCacheOperations.ReplaceItem)
+            //{
+            //    callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemUpdated), Runtime.Events.EventType.ItemUpdated, Runtime.Events.EventDataFilter.DataWithMetadata);
+            //}
+            //if ((filter & DataCacheOperations.RemoveItem) == DataCacheOperations.RemoveItem)
+            //{
+            //    callback.NCacheEventDescriptor = _NCache.RegisterCacheNotification(callback.GetNCacheNotificationCallback(clientCallback, Runtime.Events.EventType.ItemRemoved), Runtime.Events.EventType.ItemRemoved, Runtime.Events.EventDataFilter.DataWithMetadata);
+            //}
+            //if ((filter & DataCacheOperations.ClearRegion) == DataCacheOperations.ClearRegion)
+            //{
+            //    //
+            //    //NCache.CacheCleared += new CacheClearedCallback(callback.onRegionClear);
+            //}
+            //if ((filter & DataCacheOperations.CreateRegion) == DataCacheOperations.CreateRegion)
+            //{
+            //    //: No support provided yet due to lack of compatibility by NCache
+            //}
+            //if ((filter & DataCacheOperations.RemoveRegion) == DataCacheOperations.RemoveRegion)
+            //{
+            //    // No support provided yet due to lack of compatibility by NCache
+            //}
 
-            _callabackMap.Add(descriptor, callback);
-            return descriptor;
+            //_callabackMap.Add(descriptor, callback);
+            //return descriptor;
+            throw new NotSupportedException("Region callbacks are only supported in NCache Enterprise");
            
         }
         #endregion
@@ -1664,7 +1596,7 @@ namespace Alachisoft.NCache.Data.Caching
             {
                 return _cache.Unlock(key, appLockHandle, timeOut, region);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 return false;
             }

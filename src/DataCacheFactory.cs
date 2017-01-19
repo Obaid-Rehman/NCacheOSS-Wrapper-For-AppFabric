@@ -27,11 +27,11 @@ namespace Alachisoft.NCache.Data.Caching
         public DataCacheFactory(DataCacheFactoryConfiguration configuration)
         {
             _initParams = new Alachisoft.NCache.Web.Caching.CacheInitParams();
-            foreach (DataCacheServerEndpoint _temp in configuration.Servers)
-            {
-                _initParams.Server = _temp.HostName;
-                _initParams.Port = _temp.CachePort;
-            }
+            //foreach (DataCacheServerEndpoint _temp in configuration.Servers)
+            //{
+            //    _initParams.Server = _temp.HostName;
+            //    _initParams.Port = _temp.CachePort;
+            //}
         }
         #endregion
         
@@ -63,7 +63,7 @@ namespace Alachisoft.NCache.Data.Caching
                     throw ex;
                 }
             }
-            return new DataCache(theCache, cacheName);
+            return new DataCache(theCache, cache, GetLockTimeSpan(), GetRetries(), GetLockRetryTimeout());
         }
 
         /// <summary>
@@ -84,7 +84,43 @@ namespace Alachisoft.NCache.Data.Caching
                 throw ex;
             }
 
-            return new DataCache(theCache, "Default");
+            return new DataCache(theCache, "Default", GetLockTimeSpan(), GetRetries(), GetLockRetryTimeout());
+        }
+
+        private TimeSpan GetLockTimeSpan()
+        {
+            string timeInMs = ConfigurationManager.AppSettings["LockTimeSpan"];
+            int result;
+            Int32.TryParse(timeInMs, out result);
+            
+            if(result > 0)
+                return new TimeSpan(result * TimeSpan.TicksPerMillisecond);
+            else
+                return new TimeSpan(500 * TimeSpan.TicksPerMillisecond);
+        }
+
+        public int GetRetries()
+        {
+            string retries = ConfigurationManager.AppSettings["lockRetries"];
+            int result;
+            Int32.TryParse(retries, out result);
+
+            if (result > 0)
+                return result;
+            else
+                return 3;
+        }
+
+        public TimeSpan GetLockRetryTimeout()
+        {
+            string timeInMs = ConfigurationManager.AppSettings["lockRetryTimeout"];
+            int result;
+            Int32.TryParse(timeInMs, out result);
+
+            if (result > 0)
+                return new TimeSpan(result * TimeSpan.TicksPerMillisecond);
+            else
+                return new TimeSpan(500 * TimeSpan.TicksPerMillisecond);
         }
 
         /// <summary>

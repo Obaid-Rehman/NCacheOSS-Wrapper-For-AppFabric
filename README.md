@@ -25,7 +25,7 @@ STEP 3:
 Add the following <appSettings> tag in your app.config or web.config file in your project.
 	
 	<appSettings>
-    		<add key="mycache" value="mycache"/> <!-- This is the name of the cache, key and value should be same -->
+    		<add key="regionName" value="mycache"/> <!-- Map your region name with cache name -->
     		<add key="Expirable" value="False"/> <!-- Default flag whether items added in cache should be expirable or permenant -->
 			<add key="TTL" value="6:12:14"/> <!-- Expiration time in Hour, Minutes, Seconds format for TimeSpan -->
   	</appSettings>
